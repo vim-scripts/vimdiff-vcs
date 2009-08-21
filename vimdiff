@@ -24,7 +24,7 @@ If only one file is given, $VIMDIFF tries to compare to CVS or your .snapshot.
 Compares to latest different version if given --cvs AND --snapshot (or neither).
 Runs in graphical mode if called as gvimdiff (assuming symlink is in place).
 
-vimdiff+vcs v1.5, Copyright (C) 2009 by Adam Katz <scriptsATkhopiscom>, GPLv3
+vimdiff+vcs v1.6, Copyright (C) 2009 by Adam Katz <scriptsATkhopiscom>, GPLv3
 /help
 }
 
@@ -156,20 +156,21 @@ if [ -n "$USE_CVS" ] || [ $# -lt 2 -a -z "$NO_CVS" ]; then
   if [ -n "$rev2" ]; then orig2=`mytemp "$file" "$rev2"`; fi
   trap "rm -f '$orig' ${orig2:+'$orig2'}" 0 1 2
 
+
   # Usage: fetch -r|-D VERSION OUTPUT
   # Get the specified cvs VERSION into OUTPUT file or else quit with error.
   fetch() {
-    # $err must contain unique data to limit the chance of it existing in $file
-    local err="Error on '$file' from CVS at '$1' ($3,$$)" GREP_OPTIONS='' d=''
+    debug "fetching via:  cvs -n update -p $1 '$2' '$file' >'$3'"
 
-    debug "fetching via:  cvs annotate $1 '$2' '$file' |cleanup >'$3'"
-
-    # ( Grab data via cvs annotate || If it fails, use the error msg ) \
-    #   |clean it up |dump copy to OUTPUT |search for above error message \
-    # && if error was found, quit entire script
-    ( cvs annotate $1 "$2" "$file" 2>$SHH || echo ":$err" ) \
-      |sed -e '/^[^:]*:/!d' -e s/// |tee "$3" 2>$SHH |grep "^$err$" >&2 \
-    && exit 2
+    # If we can't update -- cvs update return values suck ... here's what we do:
+    # 2>&1 pipes stderr into stdout, >"$3" saves the cvs data to OUTPUT,
+    #   |tee copies that stderr for debug, |grep returns whether cvs failed
+    if ! cvs -n update -p $1 "$2" "$file" 2>&1 >"$3" \
+      |tee $SHH |grep "^Checking out $file$" >/dev/null
+    then
+      echo "Error on '$file' from CVS at '$1'"
+      exit 2
+    fi
 
     # adjust file modification stamp to CVS revision time
     if [ "x$1" = "x-D" ]; then d="-d"; else d="$1"; fi # cvs log uses lowercase
@@ -178,6 +179,7 @@ if [ -n "$USE_CVS" ] || [ $# -lt 2 -a -z "$NO_CVS" ]; then
 
     chmod -w "$3" # prevent writing to the file (you can't edit a CVS revision)
   }
+
 
   fetch $ver_flag "$rev"  "$orig"
 
